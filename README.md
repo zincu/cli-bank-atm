@@ -20,15 +20,16 @@ A terminal-based banking system written in pure Python.
    ```bash
    cp CLI_users_example.json CLI_users.json
 4. Run the program:
+   ```bash
    python bank.py
 
 ## Project Structure
 
 cli-bank-atm/
- bank.py
- CLI_users.json
- .gitignore
- README.md
+ - bank.py
+ - CLI_users.json
+ - .gitignore
+ - README.md
 
 ## Future Plans
 
