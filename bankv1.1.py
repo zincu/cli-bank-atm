@@ -25,6 +25,16 @@ class User:
     def check_accountid(self, attempt: str) -> bool:
        return attempt in Bank.users
 
+    def check_balance(self, acc_type):
+        if acc_type == "Main Account":
+            return self.main_acc
+        elif acc_type == "Investment Account":
+            return self.invest_acc
+        elif acc_type == "3":
+            return 
+        else:
+            return False
+
     def to_dict(self):
         return {
             "name" : self.name,
@@ -36,16 +46,10 @@ class User:
     def deposit(self, acc_type, amount):
         if acc_type == "Main Account":
             acckey = self.main_acc
-            return acckey + amount(f"-----------------------------DEPOSIT-----------------------------"
-                                   f"You have successfully deposited ${amount} to your {acc_type}!  \n"
-                                   f"Your current {acc_type} balanse: ${acckey}.                    \n"
-                                   f"-----------------------------------------------------------------") if 0 < amount else InvalidTypeIn("Error! Deposit amount must be valid!")
+            return acckey + amount if 0 < amount else InvalidTypeIn 
         elif acc_type == "Investment Account":
             acckey = self.invest_acc
-            return acckey + amount(f"-----------------------------DEPOSIT-----------------------------"
-                                   f"You have successfully deposited ${amount} to your {acc_type}!  \n"
-                                   f"Your current {acc_type} balanse: ${acckey}.                    \n"
-                                   f"-----------------------------------------------------------------") if 0 < amount else InvalidTypeIn("Error! Deposit amount must be valid!")
+            return acckey + amount if 0 < amount else InvalidTypeIn 
         else:
             raise InvalidTypeIn("You must enter a valid account type!")
 
@@ -81,8 +85,6 @@ class Bank:
                 account_id=acc_id,
                 name=details["name"],
                 pin=details["PIN"],
-                main_acc=details["main_acc"],
-                invest_acc=details["invest_acc"]
             )
 
     def save_data(self):
@@ -93,22 +95,76 @@ class Bank:
         with open(self.filename, "w") as f:
             json.dump(data_to_save, f, indent=4)
 
+def acc_type_choice():
+    acc_type = input(f"--------------------CLI-Bank-ATM--------------------\n"
+                    f" Please choose an account(1-3).                     \n"
+                    f" 1. [Main Account]                                  \n"
+                    f" 2. [Investment Account]                            \n"
+                    f" 3. [Back]                                          \n"
+                    f"----------------------------------------------------\n")
+    if acc_type == "1":
+        return "Main Account"
+    elif acc_type == "2":
+        return "Investment Account"
+    elif acc_type == "3":
+        return acc_type
+    else:
+        return
+
 def main():
     my_bank = Bank()
 
-    welcome_choice = input(f"--------------------CLI-Bank-ATM--------------------\n"
-                           f"                                                    \n"
-                           f"                    1. [Log in]                     \n"
-                           f"                    2. [Create Account]             \n"
-                           f"                    3. [Exit]                       \n"
-                           f"Please enter(1-3):                                  \n"
-                           f"----------------------------------------------------")
-    if welcome_choice == "1":
-        accid = input(f"--------------------CLI-Bank-ATM--------------------\n"
-                      f"Plese enter your account id: ")
-        if User.check_accountid(accid):
-            current_user = my_bank.users[accid]
-    
+    while True:
+        welcome_choice = input(f"--------------------CLI-Bank-ATM--------------------\n"
+                               f"                                                    \n"
+                               f"                    1. [Log in]                     \n"
+                               f"                    2. [Create Account]             \n"
+                               f"                    3. [Exit]                       \n"
+                               f" Please enter(1-3):                                 \n"
+                               f"----------------------------------------------------\n")
+        if welcome_choice == "1":
+            while True:
+                accid = input(f"--------------------CLI-Bank-ATM--------------------\n"
+                            f"Plese enter your account id: ")
+                if accid in my_bank.users:
+                    current_user = my_bank.users[accid]
+                    while True:
+                        if current_user.check_pin(input(f"--------------------CLI-Bank-ATM--------------------\n"
+                        f" Please enter your PIN: ")):
+                            while True:
+                                mainmenu = input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                f" Welcome, {current_user.name}!                      \n"
+                                                f" Please choose an operation to proceed with(1-5)!   \n"
+                                                f" 1. [Check Balance]                                 \n"
+                                                f" 2. [Deposit]                                       \n"
+                                                f" 3. [Withdraw]                                      \n"
+                                                f" 4. [Transfer]                                      \n"
+                                                f" 5. [Exit]                                          \n"
+                                                f"----------------------------------------------------\n")
+                                if mainmenu == "1":
+                                    acc_type =acc_type_choice()
+                                    if acc_type == "3":
+                                        pass
+                                    else:
+                                        am = input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                f"-----------------------DEPOSIT----------------------\n"
+                                                f" {current_user.name}, please enter an amount to     \n"
+                                                f" deposit to your {acc_type}(q to quit): ")
+                                        try:
+                                            result = current_user.deposit(acc_type, am)
+                                            print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                f"-----------------------DEPOSIT----------------------\n"
+                                                f" Deposit successful!                                \n"
+                                                f" You have successfully deposited {am:.2f} to your       \n"
+                                                f" {acc_type}.                                        \n"
+                                                f" Your current {acc_type} balance: ${result:.2f}     \n"
+                                                f"----------------------------------------------------")
+                                        except:
+                                            print("Error! main menu > deposit")
+                                    
+                           
+
+
             
 
 
