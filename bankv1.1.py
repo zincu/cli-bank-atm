@@ -96,23 +96,25 @@ class Bank:
             json.dump(data_to_save, f, indent=4)
 
 def acc_type_choice():
-    acc_type = input(f"--------------------CLI-Bank-ATM--------------------\n"
-                    f" Please choose an account(1-3).                     \n"
-                    f" 1. [Main Account]                                  \n"
-                    f" 2. [Investment Account]                            \n"
-                    f" 3. [Back]                                          \n"
-                    f"----------------------------------------------------\n")
-    if acc_type == "1":
-        return "Main Account"
-    elif acc_type == "2":
-        return "Investment Account"
-    elif acc_type == "3":
-        return acc_type
-    else:
-        return
+    while True:
+        acc_type = input(f"--------------------CLI-Bank-ATM--------------------\n"
+                        f" Please choose an account(1-3).                     \n"
+                        f" 1. [Main Account]                                  \n"
+                        f" 2. [Investment Account]                            \n"
+                        f" 3. [Back]                                          \n"
+                        f"----------------------------------------------------\n")
+        if acc_type == "1":
+            return "Main Account"
+        elif acc_type == "2":
+            return "Investment Account"
+        elif acc_type == "3":
+            return acc_type
+        else:
+            print(f"Error! Please enter a valid operational index(1-3)!")
 
 def main():
     my_bank = Bank()
+    break_all = False
 
     while True:
         welcome_choice = input(f"--------------------CLI-Bank-ATM--------------------\n"
@@ -125,12 +127,15 @@ def main():
         if welcome_choice == "1":
             while True:
                 accid = input(f"--------------------CLI-Bank-ATM--------------------\n"
-                            f"Plese enter your account id: ")
+                            f" Please enter your account ID(7 digits)(q to quit): ")
                 if accid in my_bank.users:
                     current_user = my_bank.users[accid]
                     while True:
-                        if current_user.check_pin(input(f"--------------------CLI-Bank-ATM--------------------\n"
-                        f" Please enter your PIN: ")):
+                        pin_attempt = (input(f"--------------------CLI-Bank-ATM--------------------\n"
+                        f" {current_user.name}, please enter your              \n"
+                        f" account PIN(4-6 digits)(q to quit): "))
+                        pin_check = current_user.check_pin(pin_attempt)
+                        if pin_check:
                             while True:
                                 mainmenu = input(f"--------------------CLI-Bank-ATM--------------------\n"
                                                 f" Welcome, {current_user.name}!                      \n"
@@ -139,30 +144,70 @@ def main():
                                                 f" 2. [Deposit]                                       \n"
                                                 f" 3. [Withdraw]                                      \n"
                                                 f" 4. [Transfer]                                      \n"
-                                                f" 5. [Exit]                                          \n"
+                                                f" 5. [Log out]                                       \n"
+                                                f" 6. [Exit]                                          \n"
                                                 f"----------------------------------------------------\n")
                                 if mainmenu == "1":
+                                    acc_type = acc_type_choice()
+                                    if acc_type == "3":
+                                        pass
+                                    elif acc_type == "1":
+                                        pass
+                                    elif acc_type == "2":
+                                        pass
+                                elif mainmenu == "2":
                                     acc_type =acc_type_choice()
                                     if acc_type == "3":
                                         pass
                                     else:
-                                        am = input(f"--------------------CLI-Bank-ATM--------------------\n"
-                                                f"-----------------------DEPOSIT----------------------\n"
-                                                f" {current_user.name}, please enter an amount to     \n"
-                                                f" deposit to your {acc_type}(q to quit): ")
                                         try:
+                                            am = int(input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                    f"-----------------------DEPOSIT----------------------\n"
+                                                    f" {current_user.name}, please enter an amount to     \n"
+                                                    f" deposit to your {acc_type}(q to quit): "))
                                             result = current_user.deposit(acc_type, am)
-                                            print(f"--------------------CLI-Bank-ATM--------------------\n"
-                                                f"-----------------------DEPOSIT----------------------\n"
-                                                f" Deposit successful!                                \n"
-                                                f" You have successfully deposited {am:.2f} to your       \n"
-                                                f" {acc_type}.                                        \n"
-                                                f" Your current {acc_type} balance: ${result:.2f}     \n"
-                                                f"----------------------------------------------------")
+                                            if result:
+                                                print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                    f"-----------------------DEPOSIT----------------------\n"
+                                                    f" Deposit successful!                                \n"
+                                                    f" You have successfully deposited ${am:.2f} to your       \n"
+                                                    f" {acc_type}.                                        \n"
+                                                    f" Your current {acc_type} balance: ${result:.2f}     \n"
+                                                    f"----------------------------------------------------")
+                                                my_bank.save_data()
+                                                time.sleep(3)
                                         except:
-                                            print("Error! main menu > deposit")
-                                    
-                           
+                                            print(" Error! main menu > deposit")
+                                elif mainmenu == "3":
+                                    pass
+                                elif mainmenu == "4":
+                                    pass
+                                elif mainmenu == "5":
+                                    break_all = True
+                                    break
+                                elif mainmenu == "6":
+                                    exit()
+                        elif pin_attempt == "q":
+                            break
+                        elif pin_check == False:
+                            print(f"-------------------------------------------------------\n"
+                                  f" Error! You must enter a valid account PIN(4-6 digits)!")
+                        if break_all:
+                            break 
+                elif accid == "q":
+                    break
+                else:
+                    print(f"--------------------------------------------------\n"
+                          f" Error! Please enter a valid account ID(7 digits)!")
+                if break_all:
+                    break
+        elif welcome_choice == "2":
+            pass
+        elif welcome_choice == "3":
+            exit() 
+        else:
+            print(f"----------------------------------------------------\n"
+                  f" Error! Please enter a valid operational index(1-3)!")                   
 
 
             
