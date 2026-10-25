@@ -9,7 +9,7 @@ venv/
 .venv/
 
 # Real user data (never upload this)
-CLI_users.json
+users.json
 
 # IDE / OS
 .vscode/

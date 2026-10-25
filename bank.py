@@ -1,375 +1,521 @@
-    # import json, time, re and random(account_id creation)
+   # import json, time, re and random(account_id creation)
 import json
 import random
 import time
 import re
 
-    # open json file as userdata
-with open ("CLI_users.json", "r") as f:
-    userdata = json.load(f)
+class InsufficientFundsError(Exception):
+    pass
+class InvalidAccountID(Exception):
+    pass
+class InvalidTypeIn(Exception):
+    pass
 
-    # create certain functions for certain operations
-    # define save data
-def save_data():
-    with open("CLI_users.json", "w") as f:
-        json.dump(userdata, f, indent=4)
-    time.sleep(3)
+class User:
+    def __init__(self, name, account_id, pin, main_acc=0, invest_acc=0):
+        self.name = name
+        self.account_id = account_id
+        self._pin = pin
+        self.main_acc = main_acc
+        self.invest_acc = invest_acc
 
-    # define registration of account
-def account_registration():
-    while True:
-        name_input = input(f"--------------------CLI-Bank-ATM--------------------\n"
-                    f"----------------ACCOUNT-REGISTRATION----------------\n"
-                    f"Please enter your name(q to quit):")
-        if name_input == "q":
-            return False
-        
-        if re.search(r'[^a-zA-Z\s]', name_input):
-            print("You must enter a valid name! \n"
-                "No special characters and numbers allowed!") 
+    def check_pin(self, attempt: str) -> bool:
+        return self._pin == attempt 
+
+    def check_accountid(self, attempt: str) -> bool:
+       return attempt in Bank.users
+
+    def check_balance(self, acc_type):
+        if acc_type == "Main Account":
+            return self.main_acc
+        elif acc_type == "Investment Account":
+            return self.invest_acc
+        elif acc_type == "3":
+            return 
         else:
+            return False
+
+    def to_dict(self):
+        return {
+            "name" : self.name,
+            "PIN" : self._pin,
+            "main_acc" : self.main_acc,
+            "invest_acc" : self.invest_acc
+        }
+
+ # define deposit method
+    def deposit(self, acc_type, amount):
+        if int(amount) <= 0:
+            return InvalidTypeIn
+        else:
+            if acc_type == "Main Account":
+                self.main_acc += amount
+                return self.main_acc
+            elif acc_type == "Investment Account":
+                self.invest_acc += amount
+                return self.invest_acc
+
+ # define withdraw method
+    def withdraw(self, acc_type, amount):
+        if amount <= 0:
+            return InvalidTypeIn
+        else:
+            if acc_type == "Main Account" and amount <= self.main_acc:
+                self.main_acc -= amount
+                return self.main_acc
+            elif acc_type == "Investment Account" and amount <= self.invest_acc:
+                self.invest_acc -= amount
+                return self.invest_acc
+            else:
+                return InvalidTypeIn
+
+    def transfer_acc(self, amount, acc_choice):
+        if acc_choice == "Main Account":
+            if amount <= 0 or amount > self.invest_acc:
+                return InvalidTypeIn
+            else:
+                self.main_acc += amount
+                self.invest_acc -= amount
+                return self.main_acc, self.invest_acc
+        elif acc_choice == "Investment Account":
+            if amount <= 0 or amount > self.main_acc:
+                return InvalidTypeIn
+            else:
+                self.main_acc -= amount
+                self.invest_acc += amount
+                return self.invest_acc, self.main_acc
+
+class Bank:
+    def __init__(self, filename='users.json'):
+        self.filename = filename
+        self.users = {}
+        self.load_data()
+
+    def load_data(self):
+        with open(self.filename, "r") as f:
+            raw_data = json.load(f)
+
+        for acc_id, details in raw_data.items():
+            self.users[acc_id] = User(
+                account_id=acc_id,
+                name=details["name"],
+                pin=details["PIN"],
+                main_acc=details["main_acc"],
+                invest_acc=details["invest_acc"]
+            )
+
+    def transfer_user(self, person1, person2, am):
+        if am < 0 or am > person1.main_acc:
+            return InvalidTypeIn
+        elif am <= person1.main_acc:
+            person1.main_acc -= am
+            person2.main_acc += am
+            return person1.main_acc
+
+    def save_data(self):
+        data_to_save ={}
+        for acc_id, user_obj in self.users.items():
+            data_to_save[acc_id] = user_obj.to_dict()
+
+        with open(self.filename, "w") as f:
+            json.dump(data_to_save, f, indent=4)
+
+def acc_type_choice(name):
+    while True:
+        acc_type = input(f"--------------------CLI-Bank-ATM--------------------\n"
+                        f" {name}, please choose an account(1-3).         \n"
+                        f" 1. [Main Account]                                   \n"
+                        f" 2. [Investment Account]                             \n"
+                        f" 3. [Back]                                           \n"
+                        f"-----------------------------------------------------\n")
+        if acc_type == "1":
+            return "Main Account"
+        elif acc_type == "2":
+            return "Investment Account"
+        elif acc_type == "3":
+            return acc_type
+        else:
+            print(f"Error! Please enter a valid operational index(1-3)!")
+
+def main():
+    my_bank = Bank()
+    my_bank.load_data()
+    while True:
+        break_all = False
+        welcome_choice = input(f"--------------------CLI-Bank-ATM--------------------\n"
+                               f"                                                    \n"
+                               f"                    1. [Log in]                     \n"
+                               f"                    2. [Create Account]             \n"
+                               f"                    3. [Exit]                       \n"
+                               f" Please enter(1-3):                                 \n"
+                               f"----------------------------------------------------\n")
+        if welcome_choice == "1":
             while True:
-                PIN_input = input(f"--------------------CLI-Bank-ATM--------------------\n"
-                                f"----------------ACCOUNT-REGISTRATION----------------\n"
-                                f"{name_input.strip()}, please create your PIN(4-6 digits only)(q to quit):")
-                if PIN_input == "q":
-                    return False
-                if len(PIN_input) not in range(4,7):
-                    print("PIN is too long or too short! Please enter a valid PIN.")
-                elif re.search(r'[^0-9]', PIN_input):
-                    print("Invalid PIN!\n"
-                        "You must enter digits only!")
+                accid = input(f"--------------------CLI-Bank-ATM--------------------\n"
+                            f" Please enter your account ID(7 digits)(q to quit): ")
+                if accid in my_bank.users:
+                    current_user = my_bank.users[accid]
+                    while True:
+                        pin_attempt = (input(f"--------------------CLI-Bank-ATM--------------------\n"
+                        f" {current_user.name}, please enter your              \n"
+                        f" account PIN(4-6 digits)(q to quit): "))
+                        pin_check = current_user.check_pin(pin_attempt)
+                        if pin_check:
+                            while True:
+                                break_all = False
+                                mainmenu = input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                f" Welcome, {current_user.name}!                      \n"
+                                                f" Please choose an operation to proceed with(1-5)!   \n"
+                                                f" 1. [Check Balance]                                 \n"
+                                                f" 2. [Deposit]                                       \n"
+                                                f" 3. [Withdraw]                                      \n"
+                                                f" 4. [Transfer]                                      \n"
+                                                f" 5. [Log out]                                       \n"
+                                                f" 6. [Exit]                                          \n"
+                                                f"----------------------------------------------------\n")
+                                if mainmenu == "1":
+                                    acc_type = acc_type_choice(current_user.name)
+                                    if acc_type == "3":
+                                        pass
+                                    elif acc_type == "Main Account":
+                                        acc_am = current_user.main_acc
+                                        print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                              f" {current_user.name}, your current {acc_type}       \n"
+                                              f" balance: ${acc_am:.2f}.                                \n")
+                                        time.sleep(3)
+                                    elif acc_type == "Investment Account":
+                                        acc_am = current_user.invest_acc
+                                        print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                              f" {current_user.name}, your current {acc_type}       \n"
+                                              f" balance: ${acc_am:.2f}.                                \n")
+                                        my_bank.save_data()
+                                        time.sleep(3)
+                                elif mainmenu == "2":
+                                    acc_type = acc_type_choice(current_user.name)
+                                    if acc_type == "3":
+                                        pass
+                                    elif acc_type == "Main Account":
+                                            while True:
+                                                am = (input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                        f"-----------------------DEPOSIT----------------------\n"
+                                                        f" {current_user.name}, please enter an amount to     \n"
+                                                        f" deposit to your {acc_type}(q to quit): "))
+                                                if am == "q":
+                                                    break
+                                                else:
+                                                    try:
+                                                        fam = float(am)
+                                                        result = current_user.deposit(acc_type, fam)
+                                                        if result == InvalidTypeIn:
+                                                            print(" You must enter a valid amount to deposit!")
+                                                        else:
+                                                            print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                                f"-----------------------DEPOSIT----------------------\n"
+                                                                f" Deposit successful!                                \n"
+                                                                f" You have successfully deposited ${fam:.2f} to your       \n"
+                                                                f" {acc_type}.                                        \n"
+                                                                f" Your current {acc_type} balance: ${result:.2f}     \n"
+                                                                f"----------------------------------------------------")
+                                                            my_bank.save_data()
+                                                            time.sleep(3)
+                                                            break
+                                                    except ValueError:
+                                                        print(" You must enter a valid amount to deposit!")
+                                    elif acc_type == "Investment Account":
+                                            while True:
+                                                am = (input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                        f"-----------------------DEPOSIT----------------------\n"
+                                                        f" {current_user.name}, please enter an amount to     \n"
+                                                        f" deposit to your {acc_type}(q to quit): "))
+                                                if am == "q":
+                                                    break
+                                                elif InvalidTypeIn:
+                                                    print(" You must enter a valid amount to deposit!")
+                                                else:
+                                                    try:
+                                                        fam = float(am)
+                                                        result = current_user.deposit(acc_type, fam)
+                                                        if result == InvalidTypeIn:
+                                                            print(" You must enter a valid amount to deposit!")
+                                                        else:
+                                                            print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                                f"-----------------------DEPOSIT----------------------\n"
+                                                                f" Withdraw successful!                                \n"
+                                                                f" You have successfully deposited ${fam:.2f} to your       \n"
+                                                                f" {acc_type}.                                        \n"
+                                                                f" Your current {acc_type} balance: ${result:.2f}     \n"
+                                                                f"----------------------------------------------------")
+                                                            my_bank.save_data()
+                                                            time.sleep(3)
+                                                            break
+                                                    except ValueError:
+                                                        print(" You must enter a valid amount to deposit!")
+                                elif mainmenu == "3":
+                                    acc_type = acc_type_choice(current_user.name)
+                                    if acc_type == "3":
+                                        pass
+                                    elif acc_type == "Main Account":
+                                            while True:
+                                                am = (input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                f"----------------------WITHDRAW----------------------\n"
+                                                f" {current_user.name}, please enter an amount to     \n"
+                                                f" withdraw from your {acc_type}(q to quit).          \n"
+                                                f" Current {acc_type} balance: ${current_user.main_acc:.2f}. \n"
+                                                f" : "))
+                                                if am == "q":
+                                                    break
+                                                else:
+                                                    try:
+                                                        fam = float(am)
+                                                        result = current_user.withdraw(acc_type, fam)
+                                                        if result == InvalidTypeIn:
+                                                            print(f" You must enter a valid amount to withdraw!\n"
+                                                                  f" (Amount must be a positive number, not exceeding your current balance). \n"
+                                                                  f" Your current {acc_type} balance: ${current_user.main_acc:.2f}.")
+                                                        else:
+                                                            print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                                f"----------------------WITHDRAW----------------------\n"
+                                                                f" Withdraw successful!                                \n"
+                                                                f" You have successfully withdrawn ${fam:.2f} from your       \n"
+                                                                f" {acc_type}.                                        \n"
+                                                                f" Your current {acc_type} balance: ${result:.2f}     \n"
+                                                                f"----------------------------------------------------")
+                                                            my_bank.save_data()
+                                                            time.sleep(3)
+                                                            break
+                                                    except ValueError:
+                                                            print(f" You must enter a valid amount to withdraw!(positive number, not exceeding your current balance).\n"
+                                                                  f" Your current {acc_type} balance: ${current_user.main_acc:.2f}.")
+                                    elif acc_type == "Investment Account":
+                                            while True:
+                                                am = (input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                f"----------------------WITHDRAW----------------------\n"
+                                                f" {current_user.name}, please enter an amount to     \n"
+                                                f" withdraw from your {acc_type}(q to quit).          \n"
+                                                f" Current {acc_type} balance: ${current_user.invest_acc:.2f}. \n"
+                                                f" : "))
+                                                if am == "q":
+                                                    break
+                                                else:
+                                                    try:
+                                                        fam = float(am)
+                                                        result = current_user.withdraw(acc_type, fam)
+                                                        if result == InvalidTypeIn:
+                                                            print(f" You must enter a valid amount to withdraw!\n"
+                                                                  f" (Amount must be a positive number, not exceeding your current balance). \n"
+                                                                  f" Your current {acc_type} balance: ${current_user.invest_acc:.2f}.")
+                                                        else:
+                                                            print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                                f"----------------------WITHDRAW----------------------\n"
+                                                                f" Withdraw successful!                                \n"
+                                                                f" You have successfully withdrawn ${fam:.2f} from your       \n"
+                                                                f" {acc_type}.                                        \n"
+                                                                f" Your current {acc_type} balance: ${result:.2f}     \n"
+                                                                f"----------------------------------------------------")
+                                                            my_bank.save_data()
+                                                            time.sleep(3)
+                                                            break
+                                                    except ValueError:
+                                                            print(f" You must enter a valid amount to withdraw!(positive number, not exceeding your current balance).\n"
+                                                                  f" Your current {acc_type} balance: ${current_user.invest_acc:.2f}.")
+                                elif mainmenu == "4":
+                                    while True:
+                                        tranop = input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                         f" Please enter what transfer option would you like   \n"
+                                         f" to choose(1-3).                                    \n"
+                                         f" 1. [To my Account]                                 \n"
+                                         f" 2. [To User]                                       \n"
+                                         f" 3. [Back]                                          \n"
+                                         f"----------------------------------------------------\n")
+                                        if tranop == "3":
+                                            break
+                                        elif tranop == "1":
+                                            acc_choice = acc_type_choice(current_user.name)
+                                            if acc_choice == "3":
+                                                pass
+                                            elif acc_choice == "Main Account":
+                                                acc_type1 = "Main Account"
+                                                acc_type2 = "Investment Account"
+                                                acc_key1 = current_user.main_acc
+                                                acc_key2 = current_user.invest_acc
+                                                while True:
+                                                    am = (input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                    f"--------------TRANSFER-TO-ACCOUNT----------------------\n"
+                                                    f" {current_user.name}, please enter an amount to     \n"
+                                                    f" transfer from your {acc_type2} to your {acc_type1}(q to quit).          \n"
+                                                    f" Current {acc_type2} balance: ${acc_key2:.2f}. \n"
+                                                    f" Current {acc_type1} balance: ${acc_key1:.2f}. \n"
+                                                    f" : "))
+                                                    if am == "q":
+                                                        break
+                                                    else:
+                                                        try:
+                                                            fam = float(am)
+                                                            result1, result2 = current_user.transfer_acc(fam, acc_choice)
+                                                            if result1 == InvalidTypeIn:
+                                                                print(f" You must enter a valid amount to transfer!\n"
+                                                                    f" (Amount must be a positive number, not exceeding your current balance). \n"
+                                                                    f" Your current {acc_type2} balance: ${acc_key2:.2f}.")
+                                                            else:
+                                                                print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                                 f"--------------TRANSFER-TO-ACCOUNT----------------------\n"
+                                                                    f" Transfer successful!                                \n"
+                                                                    f" You have successfully transfered ${fam:.2f} from your       \n"
+                                                                    f" {acc_type2} to your {acc_type1}.                                        \n"
+                                                                    f" Your current {acc_type1} balance: ${result1:.2f}     \n"
+                                                                    f" Your current {acc_type2} balance: ${result2:.2f}  \n"
+                                                                    f"----------------------------------------------------")
+                                                                my_bank.save_data()
+                                                                time.sleep(3)
+                                                                break_all = True
+                                                                break
+                                                        except ValueError:
+                                                                print(f" You must enter a valid amount to withdraw!(positive number, not exceeding your current balance).\n"
+                                                                    f" Your current {acc_type2} balance: ${acc_key2:.2f}.")
+                                            elif acc_choice == "Investment Account":
+                                                acc_type2 = "Main Account"
+                                                acc_type1 = "Investment Account"
+                                                acc_key2 = current_user.main_acc
+                                                acc_key1 = current_user.invest_acc
+                                                while True:
+                                                    am = (input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                    f"--------------TRANSFER-TO-ACCOUNT----------------------\n"
+                                                    f" {current_user.name}, please enter an amount to     \n"
+                                                    f" transfer from your {acc_type2} to your {acc_type1}(q to quit).          \n"
+                                                    f" Current {acc_type2} balance: ${acc_key2:.2f}. \n"
+                                                    f" Current {acc_type1} balance: ${acc_key1:.2f}. \n"
+                                                    f" : "))
+                                                    if am == "q":
+                                                        break
+                                                    else:
+                                                        try:
+                                                            fam = float(am)
+                                                            result1, result2 = current_user.transfer_acc(current_user, fam, acc_choice)
+                                                            if result1 == InvalidTypeIn:
+                                                                print(f" You must enter a valid amount to transfer!\n"
+                                                                    f" (Amount must be a positive number, not exceeding your current balance). \n"
+                                                                    f" Your current {acc_type2} balance: ${acc_key2:.2f}.")
+                                                            else:
+                                                                print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                                 f"--------------TRANSFER-TO-ACCOUNT----------------------\n"
+                                                                    f" Transfer successful!                                \n"
+                                                                    f" You have successfully transfered ${fam:.2f} from your       \n"
+                                                                    f" {acc_type2} to your {acc_type1}.                                        \n"
+                                                                    f" Your current {acc_type1} balance: ${result1:.2f}     \n"
+                                                                    f" Your current {acc_type2} balance: ${result2:.2f}  \n"
+                                                                    f"----------------------------------------------------")
+                                                                my_bank.save_data()
+                                                                time.sleep(3)
+                                                                break_all = True
+                                                                break
+                                                        except ValueError:
+                                                                print(f" You must enter a valid amount to withdraw!(positive number, not exceeding your current balance).\n"
+                                                                    f" Your current {acc_type2} balance: ${acc_key2:.2f}.")
+                                        elif tranop == "2":
+                                            while True:
+                                                userid = (input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                f" {current_user.name}, please enter preferable user's\n"
+                                                f" account ID(7 digits)(q to quit): "))
+                                                if userid == "q":
+                                                    break
+                                                elif userid in my_bank.users:
+                                                    other_user = my_bank.users[userid]
+                                                    while True:
+                                                        am = input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                        f" {current_user.name}, please enter an amount to    \n"
+                                                        f" transfer to {other_user.name}(q to quit).             \n"
+                                                        f" Current Main Account balance: ${current_user.main_acc:.2f}. \n"
+                                                        f" (NOTICE: amount will be withdrawn from your Main Account) \n")
+                                                        if am == "q":
+                                                            break
+                                                        elif type(am) == int or float:
+                                                            fam = float(am)
+                                                            result = my_bank.transfer_user(current_user, other_user, fam)
+                                                            if result == InvalidTypeIn:
+                                                                print(f" You must enter a valid amount to transfer! \n"
+                                                                      f" Amount must be above zero and below your current balance. \n"
+                                                                      f" Your current Main Account balance: ${current_user.main_acc:.2f}.\n"
+                                                                      f"-------------------------------------\n"
+                                                                      f" : ")
+                                                                    
+                                                            else:
+                                                                print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                                 f" {current_user.name}, you have successfully transfered \n"
+                                                                 f" ${fam:.2f} to {other_user.name}!  \n"
+                                                                 f" Your current Main Account balance: ${current_user.main_acc} \n"
+                                                                 f"---------------------------------------------------\n")
+                                                                my_bank.save_data()
+                                                                time.sleep(3)
+                                                                break_all = True
+                                                                break
+                                                        else:
+                                                            print(" You must enter a valid amount to transfer! \n")
+                                                else:
+                                                    print(" User account ID was not found! \n"
+                                                          " Please enter an existing account ID! \n")
+                                                if break_all == True:
+                                                    break
+                                        else:
+                                            print("You must enter a valid operational index(1-3)!")
+                                        if break_all == True:
+                                            break
+                                elif mainmenu == "5":
+                                    break_all = True
+                                    break
+                                elif mainmenu == "6":
+                                    exit()
+                        elif pin_attempt == "q":
+                            break
+                        elif pin_check == False:
+                            print(f"-------------------------------------------------------\n"
+                                  f" Error! You must enter a valid account PIN(4-6 digits)!")
+                        if break_all:
+                            break 
+                elif accid == "q":
+                    print("q printed, breaking . . .")
+                    break
                 else:
-                    account_id = str(random.randint(1000000, 9999999))
-                    if account_id not in userdata:
-                        break            
-            new_user = {account_id : {'name' : name_input.strip(), 'PIN' : PIN_input, 'main_acc' : 0, 'invest_acc' : 0 }}
-            userdata.update(new_user)
-            print(f"--------------------CLI-Bank-ATM--------------------\n"
-                    f" You have successfully registered, {name_input}!       \n"
-                    f" Your assigned account ID is {account_id}.")
-            save_data()
-            return False 
-    # define PIN check
-def check_PIN(account_id):
-    while True:
-        PIN = input(f"--------------------CLI-Bank-ATM--------------------\n"
-                    f"----------------------PIN-CHECK---------------------\n"
-                    f"   Welcome, {userdata[account_id]["name"]}!         \n"
-                    f"   Please enter your PIN(4-6 digits)(q to quit)     \n"
-                    f"                                                    \n"
-                    f"----------------------------------------------------\n")
-        if PIN == "q":
-            return False
-        try:
-            if PIN == userdata[account_id]["PIN"]:
-                    return 
-            else:
-                  print("Incorrect PIN! \n"
-                        "You must enter a valid PIN(4-6 digits only!)")
-        except ValueError as e:
-              print(f"Error! {e}")
-
-    # define main menu
-def mainmenu(account_id):
-    while True:
-        print(f"----------------CLI-Bank-ATM-----------------\n"
-              f"--------------------MENU---------------------\n"
-              f"Welcome back, {userdata[account_id]["name"]}!\n"
-              f"Please select an operation to run:           \n"
-              f"-- 1. Check Balance                          \n"
-              f"-- 2. Deposit money                          \n"
-              f"-- 3. Withdraw money                         \n"
-              f"-- 4. Transfer Money                         \n"
-              f"-- 5. Log out                                \n"
-              f"-- 6. Exit                                   \n"
-              f"---------------------------------------------\n")
-        oper_input = input('What operation would you like to choose(1-5): ')
-        if oper_input == "1":
-            check_balance(account_id)
-        elif oper_input == "2":
-            deposit(account_id)
-        elif oper_input == "3":
-            withdraw(account_id)
-        elif oper_input == "4":
-            transfer(account_id)
-        elif oper_input == "5":
-            return False
-        elif oper_input == "6":
-            exit()
-        else:
-            print("Invalid operation index! \n"
-                    "You must enter a valid operation index(1-5 only!)") 
-
-    # define account choice
-def account_pick(account_id):
-    while True:
-        print(f"----------------CLI-Bank-ATM-----------------\n"
-          f"---------------ACCOUNT-CHOICE----------------\n"
-          f"{userdata[account_id]["name"]}, what account \n"
-          f" would you like to choose:                   \n"
-          f"-- 1. Main account                           \n"
-          f"-- 2. Investment account                     \n"
-          f"-- 3. Go back                                \n"
-          f"---------------------------------------------\n")
-        acc_pick = input('What account would you like to choose(1-3): ')
-        if acc_pick == "1":
-            return 'MA'
-        elif acc_pick == "2":
-            return 'IA'
-        elif acc_pick == "3":
-            return False
-        else:
-            print("Incorrect operation index! \n"
-                    "You must enter a valid operation index(1-3 only!)")
-
-    # define checkbalance
-def check_balance(account_id):
-    acc_pick = account_pick(account_id)
-    if acc_pick == "MA":
-        print(f"-------------------------CLI-Bank-ATM--------------------------\n"
-              f"Your Main account balance: ${userdata[account_id]["main_acc"]:.2f}.\n"
-              f"---------------------------------------------------------------\n")
-        time.sleep(2)
-    elif acc_pick == "IA":
-        print(f"-----------------------------CLI-Bank-ATM-------------------------------\n"
-              f"Your Investement account balance: ${userdata[account_id]["invest_acc"]:.2f}.\n"
-              f"------------------------------------------------------------------------\n")
-        time.sleep(2)
-
-    # define deposit function
-def deposit(account_id):
-    acc_pick = account_pick(account_id)
-    if acc_pick == "MA":
-        deposit_operation(account_id, acc_pick)
-    elif acc_pick == "IA":
-        deposit_operation(account_id, acc_pick)
-    else:
-        return
-    
-    # define deposit operation
-def deposit_operation(account_id, acc_pick):
-    while True:
-        key = 'main_acc' if acc_pick == "MA" else 'invest_acc'
-        text_key = 'Main Account' if acc_pick == "MA" else 'Investment Account'
-        depam = input(f"--------------------------CLI-Bank-ATM----------------------------\n"
-                    f"Current {text_key} balance: ${userdata[account_id][key]:.2f}.\n"
-                    f"Please enter an amount for deposit(digits only!)(q to quit):\n")
-        if depam == "q":
-            return False
-        try:
-            amount = float(depam)
-            if amount <= 0:
-                print("Error! Please enter a positive amount to deposit!")
-            else:
-                userdata[account_id][key] += float(amount)
-                print(f"You have successfully deposited ${amount:.2f} to your {text_key}!       \n"
-                    f"Your current {text_key} balance: ${userdata[account_id][key]:.2f}.")
-                save_data()
-                return False 
-        except ValueError:
-            print("Error! Please enter a valid deposit amount!")
-        
-    # define withdraw function
-def withdraw(account_id):
-    acc_pick = account_pick(account_id)
-    if acc_pick == "MA":
-        withdraw_operation(account_id, acc_pick)
-    if acc_pick == "IA":
-        withdraw_operation(account_id, acc_pick)
-
-    # define withdraw operation
-def withdraw_operation(account_id, acc_pick):
-    while True:
-        key = 'main_acc' if acc_pick == "MA" else 'invest_acc'
-        text_key = 'Main Account' if acc_pick == "MA" else 'Investment Account'
-        withdam = input(f"--------------------------CLI-Bank-ATM----------------------------\n"
-                        f"Current {text_key} balance: ${userdata[account_id][key]:.2f}.\n"
-                        f"Please enter an amount to withdraw(digits only!)(q to quit):\n")
-        if withdam == "q":
-            return False
-        try:
-            amount = float(withdam)
-            if amount <= 0:
-                print("Error! Please enter a positive amount to withdraw!")
-            elif amount > userdata[account_id][key]:
-                print("Error! Insufficient funds!")
-            else:
-                userdata[account_id][key] -= float(amount)
-                print(f"You have successfully withdrawn ${amount:.2f} from your {text_key}!       \n"
-                    f"Your current {text_key} balance: ${userdata[account_id]["main_acc"]:.2f}.")
-                save_data()
-                return False 
-        except ValueError:
-            print("Error! Please enter a valid withdraw amount!")
-
-    # define transfer between accounts and users of the same bank
-def transferoption(account_id):
-    while True:
-        print("-----------------CLI-Bank-ATM-----------------\n"
-          f"------------------TRANSFER-------------------\n"
-          f"{userdata[account_id]["name"]}, what transfer\n"
-          f" option would you like to choose:            \n"
-          f"-- 1. To my another account                  \n"
-          f"-- 2. To another user                        \n"
-          f"-- 3. Go back                                \n"
-          f"---------------------------------------------\n")
-        tran_op_pick = input('What transfer option would you like to choose(1-3): ')
-        if tran_op_pick == "1":
-            return "Acc"
-        elif tran_op_pick == "2":
-            return "User"
-        elif tran_op_pick == "3":
-            return False
-        else:
-            print("Incorrect operation index! \n"
-                    "You must enter a valid operation index(1-3 only!)")
-
-def transferoptionacc(account_id):
-    while True:
-        print("-----------------CLI-Bank-ATM-----------------\n"
-            f"------------------TRANSFER-------------------\n"
-            f"{userdata[account_id]["name"]}, what account \n"
-            f"would you like to transfer to:               \n"
-            f"-- 1. To my main account                     \n"
-            f"-- 2. To my investment account               \n"
-            f"-- 3. Go back                                \n"
-            f"---------------------------------------------\n")
-        tran_acc_op_pick = input('What account would you like to transfer to(1-3): ')
-        if tran_acc_op_pick == "1":
-            return "MA"
-        elif tran_acc_op_pick == "2":
-            return "IA"
-        elif tran_acc_op_pick == "3":
-            return False
-        else:
-            print("Incorrect operation index! \n"
-                    "You must enter a valid operation index(1-3 only!)")
-                
-    # define transfer
-def transfer(account_id):
-    op_tran = transferoption(account_id)
-    if op_tran == "Acc":
-        acc_pick = transferoptionacc(account_id)
-        if acc_pick == False:
-            return False
-        else:
-            transfer_b_accounts(account_id, acc_pick)
-
-    elif op_tran == "User":
-        while True:
-            userid = input(f"--------------TRANSFER-TO-USER---------------\n"
-                           f"{userdata[account_id]["name"]}, please enter \n"
-                           f"user's account ID(7 digits) to proceed with  \n"
-                           f"transfer(q to go back).                      \n"
-                           f"---------------------------------------------\n")
-            if userid == "q":
-                        return False
-            if userid == account_id:
-                print("You can't transfer to yourself!")
-            else:
-                try:
-                    if userid in userdata:
-                        while True:
-                            amount = input(f"--------------TRANSFER-TO-USER---------------\n"
-                                            f"{userdata[account_id]["name"]}, please enter  \n"
-                                            f"an amount to transfer to {userdata[userid]["name"]} \n"
-                                            f"(q to quit):                                  \n"
-                                            f" Your Main account balance:                   \n"
-                                            f"  ${userdata[account_id]["main_acc"]:.2f}.        \n"
-                                            f"--------------------------------------------- \n")
-                            if amount == "q":
-                                return False
-                            try:
-                                am = float(amount)
-                                if am <= 0:
-                                    print("Please enter a positive amount to transfer!")
-                                elif am > userdata[account_id]["main_acc"]:
-                                    print("Error! Insuffiecient funds!")
-                                else:
-                                    userdata[account_id]["main_acc"] -= float(am)
-                                    userdata[userid]["main_acc"] += float(am)
-                                    print(f"--------------------------------CLI-Bank-ATM---------------------------------\n"
-                                        f"You have successfully transfered ${am} to {userdata[userid]["name"]}'s Account!\n"
-                                        f"Your current Main Account balance: ${userdata[account_id]["main_acc"]:.2f}.      \n"
-                                        f"-----------------------------------------------------------------------------")
-                                    save_data()
-                                    return False
-                            except ValueError as e:
-                                    print(f"Error! {e}")
-                    else:
-                        print("Used ID has not been found! \n"
-                            "Please enter a valid user ID!")
-                except ValueError as e:
-                    print(f"Error! {e}")
-                        
-                    if len(userid.replace(" ", "")) == 7 and userid.isalpha() == False and userid.replace(" ", "") not in userdata and userid.replace(" ", "") != "":
-                        print("Error! You typed in a wrong user ID!")
-    else:
-          return False         
-
-    # define transfer between user's own accounts
-def transfer_b_accounts(account_id, acc_pick):
-    while True:
-        key = 'main_acc' if acc_pick == "MA" else 'invest_acc'
-        key_2 = 'invest_acc' if acc_pick == "MA" else 'main_acc'
-        text_key = 'Main Account' if acc_pick == "MA" else 'Investment Account'
-        text_key_2 = 'Investment Account' if acc_pick == "MA" else 'Main Account'
-        amount = input(f"--------------------------------CLI-Bank-ATM---------------------------------\n"
-                        f"Current {text_key} balance: ${userdata[account_id][key]:.2f}.           \n"
-                        f"Current {text_key_2} balance: ${userdata[account_id][key_2]:.2f}.   \n"
-                        f"Please enter an amount to transfer to {text_key}(digits only!)(q to quit):\n ")
-        if amount == "q":
-            return False
-        try:
-            amount = float(amount)
-            if amount <= 0:
-                print("Please enter a positive amount to transfer!")
-            elif amount > userdata[account_id][key_2]:
-                print("Error! Insufficient funds!")
-            else:
-                userdata[account_id][key_2] -= float(amount)
-                userdata[account_id][key] += float(amount)
-                print(f"--------------------------------CLI-Bank-ATM---------------------------------\n"
-                    f"You have successfully transfered ${amount} to your {text_key}!           \n"
-                    f"Your current {text_key} balance: ${userdata[account_id][key]:.2f}.      \n"
-                    f"Your current {text_key_2} balance: ${userdata[account_id][key_2]:.2f}.\n"
-                    f"-----------------------------------------------------------------------------")
-                save_data()
-                return False
-        except ValueError as e:
-                print(f"Error! {e}")
-                  
-    # login system
-while True:
-    print(f"--------------------CLI-Bank-ATM--------------------\n"
-        f"                                                      \n"
-        f"                    1. [Log in]                       \n"
-        f"                    2. [Create Account]               \n"
-        f"                    3. [Exit]                         \n")
-    welcomechoice = input(
-        f"Please enter(1-3):                \n"
-        f"------------------------------------------------------\n")
-    if welcomechoice == "1":
-        while True:
-            account_id = input(f"--------------------CLI-Bank-ATM--------------------\n"
-                            f"Please enter your account ID(7 digits)(q to quit):")
-            if account_id == "q":
-                break
-            try:
-                if account_id in userdata:
-                    PIN_check = check_PIN(account_id)
-                    if PIN_check == False:
-                        break
-                    else:
-                        mainmenu(account_id)
+                    print(f"--------------------------------------------------\n"
+                          f" Error! Please enter a valid account ID(7 digits)!")
+                if break_all:
+                    break
+        elif welcome_choice == "2":
+            while True:
+                newname = input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                f" Please enter your name(q to quit): ")
+                if newname == "q":
+                    break
+                if re.search(r'[^a-zA-Z\s]', newname):
+                    print(" You must enter a valid name! \n"
+                            " No special characters and numbers allowed! \n")
                 else:
-                    print("You must enter a valid account ID(7 digits only!)") 
-            except ValueError as e:
-                print(f"Error: {e}")
-    elif welcomechoice == "2":
-        newus = account_registration()
-    elif welcomechoice == "3":
-        exit()
-    else:
-        print("You must enter a valid operation index(1-3 only!)")
+                    while True:
+                        PIN_input = input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                        f"----------------ACCOUNT-REGISTRATION----------------\n"
+                                        f"{newname.strip()}, please create your PIN(4-6 digits only)(q to quit):")
+                        if PIN_input == "q":
+                            return False
+                        if len(PIN_input) not in range(4,7):
+                            print("PIN is too long or too short! Please enter a valid PIN.")
+                        elif re.search(r'[^0-9]', PIN_input):
+                            print("Invalid PIN!\n"
+                                "You must enter digits only!")
+                        else:
+                            account_id = str(random.randint(1000000, 9999999))
+                            if account_id not in my_bank.users:
+                                break            
+                    new_user = User(newname.strip(), account_id, PIN_input, 0, 0 )
+                    print(f"--------------------CLI-Bank-ATM--------------------\n"
+                            f" You have successfully registered, {newname}!       \n"
+                            f" Your assigned account ID is {account_id}.")
+                    my_bank.users[account_id] = new_user
+                    my_bank.save_data()
+                    break
+        elif welcome_choice == "3":
+            exit() 
+        else:
+            print(f"----------------------------------------------------\n"
+                  f" Error! Please enter a valid operational index(1-3)!")                   
+
+if __name__ == '__main__':
+    main()
