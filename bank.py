@@ -3,6 +3,8 @@ import json
 import random
 import time
 import re
+from datetime import datetime
+date_format = "%Y-%m-%d %H:%M:%S"
 
 class InsufficientFundsError(Exception):
     pass
@@ -12,12 +14,15 @@ class InvalidTypeIn(Exception):
     pass
 
 class User:
-    def __init__(self, name, account_id, pin, main_acc=0, invest_acc=0):
+    def __init__(self, name, account_id, pin, main_acc=0, invest_acc=0, history = None):
         self.name = name
         self.account_id = account_id
         self._pin = pin
         self.main_acc = main_acc
         self.invest_acc = invest_acc
+        if history == None:
+            history = []
+        self._history = history
 
     def check_pin(self, attempt: str) -> bool:
         return self._pin == attempt 
@@ -40,19 +45,31 @@ class User:
             "name" : self.name,
             "PIN" : self._pin,
             "main_acc" : self.main_acc,
-            "invest_acc" : self.invest_acc
+            "invest_acc" : self.invest_acc,
+            "history" : self._history
         }
+
+    def _add_history(self, type, amount, account, timestamp, balance_after, counterparty=None):
+        record = {'type': type, 'amount': amount, 'account': account, 'timestamp': timestamp, 'balance after': balance_after, 'counterparty': counterparty}
+        self._history.append(record)
+        self._history = self._history[-10:]
+        return self._history
+
+    def get_history(self):
+        return self._history
 
  # define deposit method
     def deposit(self, acc_type, amount):
-        if int(amount) <= 0:
+        if amount <= 0:
             return InvalidTypeIn
         else:
             if acc_type == "Main Account":
                 self.main_acc += amount
+                self._add_history('deposit', amount, acc_type, datetime.now().strftime(date_format), self.main_acc, None)
                 return self.main_acc
             elif acc_type == "Investment Account":
                 self.invest_acc += amount
+                self._add_history('deposit', amount, acc_type, datetime.now().strftime(date_format), self.invest_acc, None)
                 return self.invest_acc
 
  # define withdraw method
@@ -62,9 +79,11 @@ class User:
         else:
             if acc_type == "Main Account" and amount <= self.main_acc:
                 self.main_acc -= amount
+                self._add_history('withdraw', amount, acc_type, datetime.now().strftime(date_format), self.main_acc, None)
                 return self.main_acc
             elif acc_type == "Investment Account" and amount <= self.invest_acc:
                 self.invest_acc -= amount
+                self._add_history('withdraw', amount, acc_type, datetime.now().strftime(date_format), self.invest_acc, None)
                 return self.invest_acc
             else:
                 return InvalidTypeIn
@@ -76,6 +95,7 @@ class User:
             else:
                 self.main_acc += amount
                 self.invest_acc -= amount
+                self._add_history('Transfer Internal', amount, 'Investment Account', datetime.now().strftime(date_format), self.invest_acc, acc_choice)
                 return self.main_acc, self.invest_acc
         elif acc_choice == "Investment Account":
             if amount <= 0 or amount > self.main_acc:
@@ -83,8 +103,8 @@ class User:
             else:
                 self.main_acc -= amount
                 self.invest_acc += amount
+                self._add_history('Transfer Internal', amount, 'Main Account', datetime.now().strftime(date_format), self.main_acc, acc_choice)
                 return self.invest_acc, self.main_acc
-
 class Bank:
     def __init__(self, filename='users.json'):
         self.filename = filename
@@ -101,7 +121,8 @@ class Bank:
                 name=details["name"],
                 pin=details["PIN"],
                 main_acc=details["main_acc"],
-                invest_acc=details["invest_acc"]
+                invest_acc=details["invest_acc"],
+                history=details["history"]
             )
 
     def transfer_user(self, person1, person2, am):
@@ -110,6 +131,8 @@ class Bank:
         elif am <= person1.main_acc:
             person1.main_acc -= am
             person2.main_acc += am
+            person1._add_history('Transfer Out', am, 'Main Account', datetime.now().strftime(date_format), person1.main_acc, person2.name)
+            person2._add_history('Transfer In', am, 'Main Account', datetime.now().strftime(date_format), person2.main_acc, person1.name)
             return person1.main_acc
 
     def save_data(self):
@@ -170,8 +193,9 @@ def main():
                                                 f" 2. [Deposit]                                       \n"
                                                 f" 3. [Withdraw]                                      \n"
                                                 f" 4. [Transfer]                                      \n"
-                                                f" 5. [Log out]                                       \n"
-                                                f" 6. [Exit]                                          \n"
+                                                f" 5. [Transaction History]                           \n"
+                                                f" 6. [Log out]                                       \n"
+                                                f" 7. [Exit]                                          \n"
                                                 f"----------------------------------------------------\n")
                                 if mainmenu == "1":
                                     acc_type = acc_type_choice(current_user.name)
@@ -229,8 +253,6 @@ def main():
                                                         f" deposit to your {acc_type}(q to quit): "))
                                                 if am == "q":
                                                     break
-                                                elif InvalidTypeIn:
-                                                    print(" You must enter a valid amount to deposit!")
                                                 else:
                                                     try:
                                                         fam = float(am)
@@ -390,7 +412,7 @@ def main():
                                                     else:
                                                         try:
                                                             fam = float(am)
-                                                            result1, result2 = current_user.transfer_acc(current_user, fam, acc_choice)
+                                                            result1, result2 = current_user.transfer_acc(fam, acc_choice)
                                                             if result1 == InvalidTypeIn:
                                                                 print(f" You must enter a valid amount to transfer!\n"
                                                                     f" (Amount must be a positive number, not exceeding your current balance). \n"
@@ -425,7 +447,8 @@ def main():
                                                         f" {current_user.name}, please enter an amount to    \n"
                                                         f" transfer to {other_user.name}(q to quit).             \n"
                                                         f" Current Main Account balance: ${current_user.main_acc:.2f}. \n"
-                                                        f" (NOTICE: amount will be withdrawn from your Main Account) \n")
+                                                        f" (NOTICE: amount will be withdrawn from your Main Account) \n"
+                                                        f" : ")
                                                         if am == "q":
                                                             break
                                                         elif type(am) == int or float:
@@ -442,7 +465,7 @@ def main():
                                                                 print(f"--------------------CLI-Bank-ATM--------------------\n"
                                                                  f" {current_user.name}, you have successfully transfered \n"
                                                                  f" ${fam:.2f} to {other_user.name}!  \n"
-                                                                 f" Your current Main Account balance: ${current_user.main_acc} \n"
+                                                                 f" Your current Main Account balance: ${current_user.main_acc:.2f} \n"
                                                                  f"---------------------------------------------------\n")
                                                                 my_bank.save_data()
                                                                 time.sleep(3)
@@ -460,10 +483,30 @@ def main():
                                         if break_all == True:
                                             break
                                 elif mainmenu == "5":
+                                    while True:
+                                        i = 1
+                                        history = current_user.get_history()
+                                        print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                f"-----------------TRANSACTION-HISTORY----------------\n")
+                                        for dict in history:
+                                            type, amount, account, timestamp, balance_after, counterparty = dict["type"], dict["amount"], dict["account"], dict["timestamp"], dict["balance after"], dict["counterparty"]
+                                            print(
+                                                f" {i}. Type: {type} | Amount: ${amount:.2f}              \n"
+                                                f" Account: {account} | Time: {timestamp}             \n"
+                                                f" Balance After: {balance_after:.2f} | Counterparty: {counterparty}\n"
+                                                f"----------------------------------------------------\n")
+                                            i = i + 1
+                                        back = input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                         f" Press any key to quit: ")
+                                        if back:
+                                            break
+                                elif mainmenu == "6":
                                     break_all = True
                                     break
-                                elif mainmenu == "6":
+                                elif mainmenu == "7":
                                     exit()
+                                else:
+                                    print('You must enter a valid operation index(1-7)!')
                         elif pin_attempt == "q":
                             break
                         elif pin_check == False:
@@ -504,7 +547,7 @@ def main():
                             account_id = str(random.randint(1000000, 9999999))
                             if account_id not in my_bank.users:
                                 break            
-                    new_user = User(newname.strip(), account_id, PIN_input, 0, 0 )
+                    new_user = User(newname.strip(), account_id, PIN_input, 0, 0, None )
                     print(f"--------------------CLI-Bank-ATM--------------------\n"
                             f" You have successfully registered, {newname}!       \n"
                             f" Your assigned account ID is {account_id}.")
