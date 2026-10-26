@@ -3,6 +3,9 @@ import json
 import random
 import time
 import re
+from pathlib import Path
+script_dir = Path(__file__).parent
+filepath = script_dir / "users.json"
 from datetime import datetime
 date_format = "%Y-%m-%d %H:%M:%S"
 
@@ -12,17 +15,87 @@ class InvalidAccountID(Exception):
     pass
 class InvalidTypeIn(Exception):
     pass
-
+class NegativeBalance(Exception):
+    pass
 class User:
     def __init__(self, name, account_id, pin, main_acc=0, invest_acc=0, history = None):
         self.name = name
         self.account_id = account_id
-        self._pin = pin
+        self.pin = pin
         self.main_acc = main_acc
         self.invest_acc = invest_acc
         if history == None:
             history = []
         self._history = history
+
+    @property
+    def pin(self):
+        return "*" * len(self._pin)
+    @pin.setter
+    def pin(self, value):
+        if not isinstance(value, str) or not re.match(r'^\d{4,6}$', value):
+            raise InvalidTypeIn("PIN must be 4-6 digits only!")
+        self._pin = value
+
+    @property
+    def main_acc(self):
+        return self._main_acc
+    @main_acc.setter
+    def main_acc(self, value):
+        if value < 0:
+            raise NegativeBalance("Balance can't be negative!")
+        self._main_acc = value
+
+    @property
+    def invest_acc(self):
+        return self._invest_acc
+    @invest_acc.setter
+    def invest_acc(self, value):
+        if value < 0:
+            raise NegativeBalance("Balance can't be negative!")
+        self._invest_acc = value
+
+    @property
+    def history(self):
+        return list(self._history)
+
+    @staticmethod
+    def validate_pin(value):
+        if re.search(r'[^0-9]', value):
+            raise InvalidTypeIn("PIN must contain digits only!")
+        if len(value) not in range(4,7):
+            raise InvalidTypeIn("PIN must be 4-6 digits long!")
+        return True
+
+    @staticmethod
+    def validate_name(value):
+        if re.search(r'[^a-zA-Z\s]', value):
+            raise InvalidTypeIn("No special characters and numbers allowed!")
+        return True
+
+    @classmethod
+    def generate_account_id(cls, existing_users):
+        while True:
+            account_id = str(random.randint(1000000, 9999999))
+            if account_id not in existing_users:
+                return account_id
+
+    @staticmethod
+    def validate_amount(amount, account_balance, operation_type):
+        if operation_type == "deposit":
+            if amount <= 0:
+                raise InvalidTypeIn("Deposit amount must be positive!")
+            return True
+        elif operation_type == "withdraw":
+            if amount <= 0 or amount > account_balance:
+                raise InvalidTypeIn("Withdraw amount must be positive and\n"
+                                    "        not exceed your current balance!   \n")
+            return True
+        elif operation_type == "transfer":
+            if amount <= 0 or amount > account_balance:
+                raise InvalidTypeIn("Transfer amount must be positive and\n"
+                                    "        not exceed your current balance!   \n")
+            return True
 
     def check_pin(self, attempt: str) -> bool:
         return self._pin == attempt 
@@ -32,9 +105,9 @@ class User:
 
     def check_balance(self, acc_type):
         if acc_type == "Main Account":
-            return self.main_acc
+            return self._main_acc
         elif acc_type == "Investment Account":
-            return self.invest_acc
+            return self._invest_acc
         elif acc_type == "3":
             return 
         else:
@@ -44,8 +117,8 @@ class User:
         return {
             "name" : self.name,
             "PIN" : self._pin,
-            "main_acc" : self.main_acc,
-            "invest_acc" : self.invest_acc,
+            "main_acc" : self._main_acc,
+            "invest_acc" : self._invest_acc,
             "history" : self._history
         }
 
@@ -60,53 +133,44 @@ class User:
 
  # define deposit method
     def deposit(self, acc_type, amount):
-        if amount <= 0:
-            return InvalidTypeIn
-        else:
-            if acc_type == "Main Account":
-                self.main_acc += amount
-                self._add_history('deposit', amount, acc_type, datetime.now().strftime(date_format), self.main_acc, None)
-                return self.main_acc
-            elif acc_type == "Investment Account":
-                self.invest_acc += amount
-                self._add_history('deposit', amount, acc_type, datetime.now().strftime(date_format), self.invest_acc, None)
-                return self.invest_acc
+        User.validate_amount(amount, None, "deposit")
+        if acc_type == "Main Account":
+            self._main_acc += amount
+            self._add_history('deposit', amount, acc_type, datetime.now().strftime(date_format), self._main_acc, None)
+            return self._main_acc
+        elif acc_type == "Investment Account":
+            self._invest_acc += amount
+            self._add_history('deposit', amount, acc_type, datetime.now().strftime(date_format), self._invest_acc, None)
+            return self._invest_acc
 
  # define withdraw method
     def withdraw(self, acc_type, amount):
-        if amount <= 0:
-            return InvalidTypeIn
-        else:
-            if acc_type == "Main Account" and amount <= self.main_acc:
-                self.main_acc -= amount
-                self._add_history('withdraw', amount, acc_type, datetime.now().strftime(date_format), self.main_acc, None)
-                return self.main_acc
-            elif acc_type == "Investment Account" and amount <= self.invest_acc:
-                self.invest_acc -= amount
-                self._add_history('withdraw', amount, acc_type, datetime.now().strftime(date_format), self.invest_acc, None)
-                return self.invest_acc
-            else:
-                return InvalidTypeIn
+        acckey = self._main_acc if acc_type == "Main Account" else self._invest_acc
+        User.validate_amount(amount, acckey, "withdraw")
+        if acc_type == "Main Account" and amount <= acckey:
+            self._main_acc -= amount
+            self._add_history('withdraw', amount, acc_type, datetime.now().strftime(date_format), self.main_acc, None)
+            return self._main_acc
+        elif acc_type == "Investment Account" and amount <= acckey:
+            self._invest_acc -= amount
+            self._add_history('withdraw', amount, acc_type, datetime.now().strftime(date_format), self.invest_acc, None)
+            return self._invest_acc
 
     def transfer_acc(self, amount, acc_choice):
+        acckey = self._invest_acc if acc_choice == "Main Account" else self._main_acc
+        User.validate_amount(amount, acckey, "transfer")
         if acc_choice == "Main Account":
-            if amount <= 0 or amount > self.invest_acc:
-                return InvalidTypeIn
-            else:
-                self.main_acc += amount
-                self.invest_acc -= amount
-                self._add_history('Transfer Internal', amount, 'Investment Account', datetime.now().strftime(date_format), self.invest_acc, acc_choice)
-                return self.main_acc, self.invest_acc
+            self._main_acc += amount
+            self._invest_acc -= amount
+            self._add_history('Transfer Internal', amount, 'Investment Account', datetime.now().strftime(date_format), self.invest_acc, acc_choice)
+            return self._main_acc, self._invest_acc
         elif acc_choice == "Investment Account":
-            if amount <= 0 or amount > self.main_acc:
-                return InvalidTypeIn
-            else:
-                self.main_acc -= amount
-                self.invest_acc += amount
-                self._add_history('Transfer Internal', amount, 'Main Account', datetime.now().strftime(date_format), self.main_acc, acc_choice)
-                return self.invest_acc, self.main_acc
+            self._main_acc -= amount
+            self._invest_acc += amount
+            self._add_history('Transfer Internal', amount, 'Main Account', datetime.now().strftime(date_format), self.main_acc, acc_choice)
+            return self._invest_acc, self._main_acc
 class Bank:
-    def __init__(self, filename='users.json'):
+    def __init__(self, filename=filepath):
         self.filename = filename
         self.users = {}
         self.load_data()
@@ -127,7 +191,9 @@ class Bank:
 
     def transfer_user(self, person1, person2, am):
         if am < 0 or am > person1.main_acc:
-            return InvalidTypeIn
+            raise InvalidTypeIn(" You must enter a valid amount to transfer!\n"
+                                "         The amount must be positive and not exceed\n"
+                                "         your current balance!                     \n")
         elif am <= person1.main_acc:
             person1.main_acc -= am
             person2.main_acc += am
@@ -230,21 +296,18 @@ def main():
                                                     try:
                                                         fam = float(am)
                                                         result = current_user.deposit(acc_type, fam)
-                                                        if result == InvalidTypeIn:
-                                                            print(" You must enter a valid amount to deposit!")
-                                                        else:
-                                                            print(f"--------------------CLI-Bank-ATM--------------------\n"
-                                                                f"-----------------------DEPOSIT----------------------\n"
-                                                                f" Deposit successful!                                \n"
-                                                                f" You have successfully deposited ${fam:.2f} to your       \n"
-                                                                f" {acc_type}.                                        \n"
-                                                                f" Your current {acc_type} balance: ${result:.2f}     \n"
-                                                                f"----------------------------------------------------")
-                                                            my_bank.save_data()
-                                                            time.sleep(3)
-                                                            break
-                                                    except ValueError:
-                                                        print(" You must enter a valid amount to deposit!")
+                                                        print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                            f"-----------------------DEPOSIT----------------------\n"
+                                                            f" Deposit successful!                                \n"
+                                                            f" You have successfully deposited ${fam:.2f} to your       \n"
+                                                            f" {acc_type}.                                        \n"
+                                                            f" Your current {acc_type} balance: ${result:.2f}     \n"
+                                                            f"----------------------------------------------------")
+                                                        my_bank.save_data()
+                                                        time.sleep(3)
+                                                        break
+                                                    except InvalidTypeIn as e:
+                                                        print(f" Error: {e}")
                                     elif acc_type == "Investment Account":
                                             while True:
                                                 am = (input(f"--------------------CLI-Bank-ATM--------------------\n"
@@ -257,21 +320,18 @@ def main():
                                                     try:
                                                         fam = float(am)
                                                         result = current_user.deposit(acc_type, fam)
-                                                        if result == InvalidTypeIn:
-                                                            print(" You must enter a valid amount to deposit!")
-                                                        else:
-                                                            print(f"--------------------CLI-Bank-ATM--------------------\n"
-                                                                f"-----------------------DEPOSIT----------------------\n"
-                                                                f" Withdraw successful!                                \n"
-                                                                f" You have successfully deposited ${fam:.2f} to your       \n"
-                                                                f" {acc_type}.                                        \n"
-                                                                f" Your current {acc_type} balance: ${result:.2f}     \n"
-                                                                f"----------------------------------------------------")
-                                                            my_bank.save_data()
-                                                            time.sleep(3)
-                                                            break
-                                                    except ValueError:
-                                                        print(" You must enter a valid amount to deposit!")
+                                                        print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                            f"-----------------------DEPOSIT----------------------\n"
+                                                            f" Deposit successful!                                \n"
+                                                            f" You have successfully deposited ${fam:.2f} to your       \n"
+                                                            f" {acc_type}.                                        \n"
+                                                            f" Your current {acc_type} balance: ${result:.2f}     \n"
+                                                            f"----------------------------------------------------")
+                                                        my_bank.save_data()
+                                                        time.sleep(3)
+                                                        break
+                                                    except InvalidTypeIn as e:
+                                                        print(f" Error: {e}")
                                 elif mainmenu == "3":
                                     acc_type = acc_type_choice(current_user.name)
                                     if acc_type == "3":
@@ -290,24 +350,19 @@ def main():
                                                     try:
                                                         fam = float(am)
                                                         result = current_user.withdraw(acc_type, fam)
-                                                        if result == InvalidTypeIn:
-                                                            print(f" You must enter a valid amount to withdraw!\n"
-                                                                  f" (Amount must be a positive number, not exceeding your current balance). \n"
-                                                                  f" Your current {acc_type} balance: ${current_user.main_acc:.2f}.")
-                                                        else:
-                                                            print(f"--------------------CLI-Bank-ATM--------------------\n"
-                                                                f"----------------------WITHDRAW----------------------\n"
-                                                                f" Withdraw successful!                                \n"
-                                                                f" You have successfully withdrawn ${fam:.2f} from your       \n"
-                                                                f" {acc_type}.                                        \n"
-                                                                f" Your current {acc_type} balance: ${result:.2f}     \n"
-                                                                f"----------------------------------------------------")
-                                                            my_bank.save_data()
-                                                            time.sleep(3)
-                                                            break
-                                                    except ValueError:
-                                                            print(f" You must enter a valid amount to withdraw!(positive number, not exceeding your current balance).\n"
-                                                                  f" Your current {acc_type} balance: ${current_user.main_acc:.2f}.")
+                                                        print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                            f"----------------------WITHDRAW----------------------\n"
+                                                            f" Withdraw successful!                                \n"
+                                                            f" You have successfully withdrawn ${fam:.2f} from your       \n"
+                                                            f" {acc_type}.                                        \n"
+                                                            f" Your current {acc_type} balance: ${result:.2f}     \n"
+                                                            f"----------------------------------------------------")
+                                                        my_bank.save_data()
+                                                        time.sleep(3)
+                                                        break
+                                                    except InvalidTypeIn as e:
+                                                        print(f" Error: {e}"
+                                                              f" Your current {acc_type} balance: ${current_user.main_acc:.2f}.")
                                     elif acc_type == "Investment Account":
                                             while True:
                                                 am = (input(f"--------------------CLI-Bank-ATM--------------------\n"
@@ -322,23 +377,18 @@ def main():
                                                     try:
                                                         fam = float(am)
                                                         result = current_user.withdraw(acc_type, fam)
-                                                        if result == InvalidTypeIn:
-                                                            print(f" You must enter a valid amount to withdraw!\n"
-                                                                  f" (Amount must be a positive number, not exceeding your current balance). \n"
-                                                                  f" Your current {acc_type} balance: ${current_user.invest_acc:.2f}.")
-                                                        else:
-                                                            print(f"--------------------CLI-Bank-ATM--------------------\n"
-                                                                f"----------------------WITHDRAW----------------------\n"
-                                                                f" Withdraw successful!                                \n"
-                                                                f" You have successfully withdrawn ${fam:.2f} from your       \n"
-                                                                f" {acc_type}.                                        \n"
-                                                                f" Your current {acc_type} balance: ${result:.2f}     \n"
-                                                                f"----------------------------------------------------")
-                                                            my_bank.save_data()
-                                                            time.sleep(3)
-                                                            break
-                                                    except ValueError:
-                                                            print(f" You must enter a valid amount to withdraw!(positive number, not exceeding your current balance).\n"
+                                                        print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                            f"----------------------WITHDRAW----------------------\n"
+                                                            f" Withdraw successful!                                \n"
+                                                            f" You have successfully withdrawn ${fam:.2f} from your       \n"
+                                                            f" {acc_type}.                                        \n"
+                                                            f" Your current {acc_type} balance: ${result:.2f}     \n"
+                                                            f"----------------------------------------------------")
+                                                        my_bank.save_data()
+                                                        time.sleep(3)
+                                                        break
+                                                    except InvalidTypeIn as e:
+                                                            print(f" Error: {e}"
                                                                   f" Your current {acc_type} balance: ${current_user.invest_acc:.2f}.")
                                 elif mainmenu == "4":
                                     while True:
@@ -362,7 +412,7 @@ def main():
                                                 acc_key2 = current_user.invest_acc
                                                 while True:
                                                     am = (input(f"--------------------CLI-Bank-ATM--------------------\n"
-                                                    f"--------------TRANSFER-TO-ACCOUNT----------------------\n"
+                                                    f"----------------TRANSFER-TO-ACCOUNT-----------------\n"
                                                     f" {current_user.name}, please enter an amount to     \n"
                                                     f" transfer from your {acc_type2} to your {acc_type1}(q to quit).          \n"
                                                     f" Current {acc_type2} balance: ${acc_key2:.2f}. \n"
@@ -374,25 +424,20 @@ def main():
                                                         try:
                                                             fam = float(am)
                                                             result1, result2 = current_user.transfer_acc(fam, acc_choice)
-                                                            if result1 == InvalidTypeIn:
-                                                                print(f" You must enter a valid amount to transfer!\n"
-                                                                    f" (Amount must be a positive number, not exceeding your current balance). \n"
-                                                                    f" Your current {acc_type2} balance: ${acc_key2:.2f}.")
-                                                            else:
-                                                                print(f"--------------------CLI-Bank-ATM--------------------\n"
-                                                                 f"--------------TRANSFER-TO-ACCOUNT----------------------\n"
-                                                                    f" Transfer successful!                                \n"
-                                                                    f" You have successfully transfered ${fam:.2f} from your       \n"
-                                                                    f" {acc_type2} to your {acc_type1}.                                        \n"
-                                                                    f" Your current {acc_type1} balance: ${result1:.2f}     \n"
-                                                                    f" Your current {acc_type2} balance: ${result2:.2f}  \n"
-                                                                    f"----------------------------------------------------")
-                                                                my_bank.save_data()
-                                                                time.sleep(3)
-                                                                break_all = True
-                                                                break
-                                                        except ValueError:
-                                                                print(f" You must enter a valid amount to withdraw!(positive number, not exceeding your current balance).\n"
+                                                            print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                            f"----------------TRANSFER-TO-ACCOUNT-----------------\n"
+                                                                f" Transfer successful!                                \n"
+                                                                f" You have successfully transfered ${fam:.2f} from your       \n"
+                                                                f" {acc_type2} to your {acc_type1}.                                        \n"
+                                                                f" Your current {acc_type1} balance: ${result1:.2f}     \n"
+                                                                f" Your current {acc_type2} balance: ${result2:.2f}  \n"
+                                                                f"----------------------------------------------------")
+                                                            my_bank.save_data()
+                                                            time.sleep(3)
+                                                            break_all = True
+                                                            break
+                                                        except InvalidTypeIn as e:
+                                                                print(f" Error: {e}"
                                                                     f" Your current {acc_type2} balance: ${acc_key2:.2f}.")
                                             elif acc_choice == "Investment Account":
                                                 acc_type2 = "Main Account"
@@ -401,7 +446,7 @@ def main():
                                                 acc_key1 = current_user.invest_acc
                                                 while True:
                                                     am = (input(f"--------------------CLI-Bank-ATM--------------------\n"
-                                                    f"--------------TRANSFER-TO-ACCOUNT----------------------\n"
+                                                                f"----------------TRANSFER-TO-ACCOUNT-----------------\n"
                                                     f" {current_user.name}, please enter an amount to     \n"
                                                     f" transfer from your {acc_type2} to your {acc_type1}(q to quit).          \n"
                                                     f" Current {acc_type2} balance: ${acc_key2:.2f}. \n"
@@ -413,29 +458,25 @@ def main():
                                                         try:
                                                             fam = float(am)
                                                             result1, result2 = current_user.transfer_acc(fam, acc_choice)
-                                                            if result1 == InvalidTypeIn:
-                                                                print(f" You must enter a valid amount to transfer!\n"
-                                                                    f" (Amount must be a positive number, not exceeding your current balance). \n"
-                                                                    f" Your current {acc_type2} balance: ${acc_key2:.2f}.")
-                                                            else:
-                                                                print(f"--------------------CLI-Bank-ATM--------------------\n"
-                                                                 f"--------------TRANSFER-TO-ACCOUNT----------------------\n"
-                                                                    f" Transfer successful!                                \n"
-                                                                    f" You have successfully transfered ${fam:.2f} from your       \n"
-                                                                    f" {acc_type2} to your {acc_type1}.                                        \n"
-                                                                    f" Your current {acc_type1} balance: ${result1:.2f}     \n"
-                                                                    f" Your current {acc_type2} balance: ${result2:.2f}  \n"
-                                                                    f"----------------------------------------------------")
-                                                                my_bank.save_data()
-                                                                time.sleep(3)
-                                                                break_all = True
-                                                                break
-                                                        except ValueError:
-                                                                print(f" You must enter a valid amount to withdraw!(positive number, not exceeding your current balance).\n"
+                                                            print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                            f"--------------TRANSFER-TO-ACCOUNT----------------------\n"
+                                                                f" Transfer successful!                                \n"
+                                                                f" You have successfully transfered ${fam:.2f} from your       \n"
+                                                                f" {acc_type2} to your {acc_type1}.                                        \n"
+                                                                f" Your current {acc_type1} balance: ${result1:.2f}     \n"
+                                                                f" Your current {acc_type2} balance: ${result2:.2f}  \n"
+                                                                f"----------------------------------------------------")
+                                                            my_bank.save_data()
+                                                            time.sleep(3)
+                                                            break_all = True
+                                                            break
+                                                        except InvalidTypeIn as e:
+                                                                print(f" Error: {e}"
                                                                     f" Your current {acc_type2} balance: ${acc_key2:.2f}.")
                                         elif tranop == "2":
                                             while True:
                                                 userid = (input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                    f"------------------TRANSFER-TO-USER------------------\n"
                                                 f" {current_user.name}, please enter preferable user's\n"
                                                 f" account ID(7 digits)(q to quit): "))
                                                 if userid == "q":
@@ -444,6 +485,7 @@ def main():
                                                     other_user = my_bank.users[userid]
                                                     while True:
                                                         am = input(f"--------------------CLI-Bank-ATM--------------------\n"
+                                                         f"------------------TRANSFER-TO-USER------------------\n"
                                                         f" {current_user.name}, please enter an amount to    \n"
                                                         f" transfer to {other_user.name}(q to quit).             \n"
                                                         f" Current Main Account balance: ${current_user.main_acc:.2f}. \n"
@@ -451,28 +493,22 @@ def main():
                                                         f" : ")
                                                         if am == "q":
                                                             break
-                                                        elif type(am) == int or float:
-                                                            fam = float(am)
-                                                            result = my_bank.transfer_user(current_user, other_user, fam)
-                                                            if result == InvalidTypeIn:
-                                                                print(f" You must enter a valid amount to transfer! \n"
-                                                                      f" Amount must be above zero and below your current balance. \n"
-                                                                      f" Your current Main Account balance: ${current_user.main_acc:.2f}.\n"
-                                                                      f"-------------------------------------\n"
-                                                                      f" : ")
-                                                                    
-                                                            else:
+                                                        else:
+                                                            try: 
+                                                                fam = float(am)
+                                                                result = my_bank.transfer_user(current_user, other_user, fam)
                                                                 print(f"--------------------CLI-Bank-ATM--------------------\n"
-                                                                 f" {current_user.name}, you have successfully transfered \n"
-                                                                 f" ${fam:.2f} to {other_user.name}!  \n"
-                                                                 f" Your current Main Account balance: ${current_user.main_acc:.2f} \n"
-                                                                 f"---------------------------------------------------\n")
+                                                                f" {current_user.name}, you have successfully transfered \n"
+                                                                f" ${fam:.2f} to {other_user.name}!  \n"
+                                                                f" Your current Main Account balance: ${current_user.main_acc:.2f} \n"
+                                                                f"---------------------------------------------------\n")
                                                                 my_bank.save_data()
                                                                 time.sleep(3)
                                                                 break_all = True
                                                                 break
-                                                        else:
-                                                            print(" You must enter a valid amount to transfer! \n")
+                                                            except InvalidTypeIn as e:
+                                                                print(f" Error: {e}"
+                                                                      f" Your current Main Account balance: ${current_user.main_acc:.2f}.")
                                                 else:
                                                     print(" User account ID was not found! \n"
                                                           " Please enter an existing account ID! \n")
@@ -528,32 +564,31 @@ def main():
                                 f" Please enter your name(q to quit): ")
                 if newname == "q":
                     break
-                if re.search(r'[^a-zA-Z\s]', newname):
-                    print(" You must enter a valid name! \n"
-                            " No special characters and numbers allowed! \n")
-                else:
+                try:
+                    User.validate_name(newname)
                     while True:
                         PIN_input = input(f"--------------------CLI-Bank-ATM--------------------\n"
                                         f"----------------ACCOUNT-REGISTRATION----------------\n"
                                         f"{newname.strip()}, please create your PIN(4-6 digits only)(q to quit):")
                         if PIN_input == "q":
                             return False
-                        if len(PIN_input) not in range(4,7):
-                            print("PIN is too long or too short! Please enter a valid PIN.")
-                        elif re.search(r'[^0-9]', PIN_input):
-                            print("Invalid PIN!\n"
-                                "You must enter digits only!")
-                        else:
-                            account_id = str(random.randint(1000000, 9999999))
-                            if account_id not in my_bank.users:
-                                break            
-                    new_user = User(newname.strip(), account_id, PIN_input, 0, 0, None )
-                    print(f"--------------------CLI-Bank-ATM--------------------\n"
-                            f" You have successfully registered, {newname}!       \n"
-                            f" Your assigned account ID is {account_id}.")
-                    my_bank.users[account_id] = new_user
-                    my_bank.save_data()
-                    break
+                        try:
+                            User.validate_pin(PIN_input)
+                            account_id = User.generate_account_id(my_bank.users)
+                            new_user = User(newname.strip(), account_id, PIN_input, 0, 0, None )
+                            print(f"--------------------CLI-Bank-ATM--------------------\n"
+                                    f" You have successfully registered, {newname}!       \n"
+                                    f" Your assigned account ID is {account_id}.")
+                            my_bank.users[account_id] = new_user
+                            my_bank.save_data()
+                            break_all = True
+                            break
+                        except InvalidTypeIn as e:
+                            print(f" Error: {e}") 
+                except InvalidTypeIn as e:
+                    print(f" Error: {e}")
+                if break_all:
+                    break      
         elif welcome_choice == "3":
             exit() 
         else:
